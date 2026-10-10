@@ -8,7 +8,7 @@ import { HOUSTON } from "@/lib/mock-data";
 
 const ease = [0.25, 0.1, 0.25, 1] as const;
 const HOUSTON_ONLY = ["houston"];
-const HOUSTON_MARKER = [{ coords: HOUSTON, color: "#38bdf8" }];
+const HOUSTON_MARKER = [{ coords: HOUSTON, color: "#25b5d8" }];
 
 const COPY = {
   en: {
@@ -35,12 +35,12 @@ export default function Landing() {
     <section className="relative overflow-hidden">
       <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:py-24">
         <div className="flex flex-col items-start gap-6">
-          <div className="flex rounded-full border border-zinc-800 p-0.5 text-xs">
+          <div className="flex rounded-full border border-navy-800 p-0.5 text-xs">
             {(["en", "es"] as const).map((l) => (
               <button
                 key={l}
                 onClick={() => setLang(l)}
-                className={`rounded-full px-3 py-1 transition-colors ${lang === l ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-white"}`}
+                className={`rounded-full px-3 py-1 transition-colors ${lang === l ? "bg-teal-600 text-white" : "text-navy-500 hover:text-white"}`}
               >
                 {l === "en" ? "English" : "Español"}
               </button>
@@ -52,7 +52,7 @@ export default function Landing() {
             initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease }}
-            className="inline-flex items-center rounded-full border border-sky-400/30 bg-sky-500/10 px-4 py-1.5 text-sm font-medium text-sky-400"
+            className="inline-flex items-center rounded-full border border-cyan-400/30 bg-cyan-500/10 px-4 py-1.5 text-sm font-medium text-cyan-400"
           >
             {t.badge}
           </motion.span>
@@ -72,7 +72,7 @@ export default function Landing() {
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, delay: 0.3, ease }}
-            className="max-w-md text-base leading-relaxed text-zinc-400"
+            className="max-w-md text-base leading-relaxed text-navy-400"
           >
             {t.body}
           </motion.p>
@@ -83,13 +83,13 @@ export default function Landing() {
             transition={{ duration: 0.9, delay: 0.45, ease }}
             className="flex flex-wrap gap-3"
           >
-            <Button asChild className="group h-11 rounded-xl bg-white px-6 font-semibold text-zinc-900 hover:bg-zinc-100">
+            <Button asChild className="group h-11 rounded-xl bg-cyan-400 px-6 font-bold text-navy-950 hover:bg-cyan-300">
               <Link to="/map">
                 {t.cta}
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
               </Link>
             </Button>
-            <Button asChild variant="outline" className="h-11 rounded-xl border-zinc-700 bg-transparent px-6 text-zinc-200 hover:bg-zinc-900 hover:text-white">
+            <Button asChild variant="outline" className="h-11 rounded-xl border-navy-700 bg-transparent px-6 text-navy-200 hover:bg-navy-900 hover:text-white">
               <Link to="/map">{t.secondary}</Link>
             </Button>
           </motion.div>
@@ -100,9 +100,9 @@ export default function Landing() {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 1.2, ease }}
-          className="relative mx-auto w-full max-w-lg text-zinc-500"
+          className="relative mx-auto w-full max-w-lg text-navy-500"
         >
-          <div className="pointer-events-none absolute inset-0 rounded-full bg-sky-500/10 blur-3xl" />
+          <div className="pointer-events-none absolute inset-0 rounded-full bg-cyan-500/10 blur-3xl" />
           <Globe
             className="relative aspect-square w-full"
             variant="wireframe"
