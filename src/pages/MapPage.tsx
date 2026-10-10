@@ -17,7 +17,7 @@ export default function MapPage() {
           {/* Dark basemap to match the UI */}
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+            url="https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_4gm9_1_8794dbea55a0f8c75afeece8"
           />
           {MOCK_GAUGES.map((g) => (
             <CircleMarker
