@@ -30,7 +30,7 @@ interface VoiceAgentProps {
 export default function VoiceAgent(props: VoiceAgentProps) {
   if (!AGENT_ID) {
     return (
-      <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300">
+      <p className="rounded-xl border border-alert-500/30 bg-alert-500/10 p-3 text-sm text-alert-300">
         Add VITE_ELEVENLABS_AGENT_ID to .env.local and restart the dev server.
       </p>
     );
@@ -111,7 +111,7 @@ function VoiceAgentInner({ onFocusGauge, householdNotes = "none provided", class
   return (
     <div className={cn("flex w-full flex-col items-center gap-4", className)}>
       {/* Language picker, locked during a call */}
-      <div className="flex rounded-full border border-zinc-800 p-0.5 text-xs">
+      <div className="flex rounded-full border border-navy-800 p-0.5 text-xs">
         {(["en", "es"] as const).map((l) => (
           <button
             key={l}
@@ -119,7 +119,7 @@ function VoiceAgentInner({ onFocusGauge, householdNotes = "none provided", class
             onClick={() => setLang(l)}
             className={cn(
               "rounded-full px-3 py-1 transition-colors disabled:cursor-not-allowed",
-              lang === l ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-white",
+              lang === l ? "bg-teal-600 text-white" : "text-navy-500 hover:text-white",
             )}
           >
             {l === "en" ? "English" : "Español"}
@@ -137,7 +137,7 @@ function VoiceAgentInner({ onFocusGauge, householdNotes = "none provided", class
         <motion.span
           className={cn(
             "absolute inset-0 rounded-full blur-xl",
-            isSpeaking ? "bg-sky-400/40" : "bg-sky-500/20",
+            isSpeaking ? "bg-cyan-400/40" : "bg-cyan-500/20",
           )}
           animate={{ scale: 1 + level * 0.8, opacity: connected ? 0.5 + level * 0.5 : 0.3 }}
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
@@ -146,8 +146,8 @@ function VoiceAgentInner({ onFocusGauge, householdNotes = "none provided", class
           className={cn(
             "relative flex h-20 w-20 items-center justify-center rounded-full border transition-colors",
             connected
-              ? "border-sky-400/60 bg-sky-500/20 text-sky-200"
-              : "border-sky-400/40 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20",
+              ? "border-cyan-400/60 bg-cyan-500/20 text-cyan-200"
+              : "border-cyan-400/40 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20",
           )}
           animate={{ scale: 1 + level * 0.15 }}
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
@@ -162,10 +162,10 @@ function VoiceAgentInner({ onFocusGauge, householdNotes = "none provided", class
         </motion.span>
       </button>
 
-      <p className="text-sm text-zinc-400">{label}</p>
+      <p className="text-sm text-navy-400">{label}</p>
 
       {(micError || (status === "error" && errorMessage)) && (
-        <p className="text-center text-xs text-red-400">{micError || errorMessage}</p>
+        <p className="text-center text-xs text-alert-300">{micError || errorMessage}</p>
       )}
 
       {/* Live captions */}
@@ -176,7 +176,7 @@ function VoiceAgentInner({ onFocusGauge, householdNotes = "none provided", class
               key={i}
               className={cn(
                 "rounded-xl px-3 py-2",
-                c.role === "agent" ? "bg-zinc-800/80 text-zinc-200" : "self-end bg-sky-500/10 text-sky-200",
+                c.role === "agent" ? "bg-navy-800/80 text-navy-200" : "self-end bg-cyan-500/10 text-cyan-200",
               )}
             >
               {c.text}

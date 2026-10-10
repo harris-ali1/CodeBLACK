@@ -48,6 +48,30 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* Storm Command palette: edit the colors here and the whole app follows. */
+@theme {
+    --color-navy-50: #f4f8fd;   /* Ice White */
+    --color-navy-100: #f4f8fd;
+    --color-navy-200: #d6e0f0;
+    --color-navy-300: #b4c3dc;
+    --color-navy-400: #9fb2d0;
+    --color-navy-500: #7f93b8;
+    --color-navy-600: #6f83ad;
+    --color-navy-700: #2a3b6b;
+    --color-navy-800: #1f2c52;
+    --color-navy-900: #131c3a;
+    --color-navy-950: #0b1128;  /* Midnight Navy */
+
+    --color-teal-600: #16808f;  /* Deep Teal */
+    --color-cyan-300: #7dd8ee;
+    --color-cyan-400: #25b5d8;  /* Cyan */
+    --color-cyan-500: #25b5d8;
+    --color-alert-200: #ffc7ad;
+    --color-alert-300: #ff9a70;
+    --color-alert-400: #ff8553;
+    --color-alert-500: #ff6b35; /* Alert Orange */
+}
+
 :root {
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
@@ -84,24 +108,24 @@
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
+    --background: #0b1128;
+    --foreground: #f4f8fd;
+    --card: #131c3a;
+    --card-foreground: #f4f8fd;
+    --popover: #131c3a;
+    --popover-foreground: #f4f8fd;
+    --primary: #25b5d8;
+    --primary-foreground: #0b1128;
+    --secondary: #1f2c52;
+    --secondary-foreground: #f4f8fd;
+    --muted: #1f2c52;
+    --muted-foreground: #9fb2d0;
+    --accent: #1f2c52;
+    --accent-foreground: #f4f8fd;
+    --destructive: #ff6b35;
+    --border: #1f2c52;
+    --input: #2a3b6b;
+    --ring: #25b5d8;
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);

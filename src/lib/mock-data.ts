@@ -24,9 +24,9 @@ export const MOCK_GAUGES: Gauge[] = [
 ];
 
 export const RISK_COLOR: Record<RiskLevel, string> = {
-  normal: "#22c55e",
-  watch: "#f59e0b",
-  flooding: "#ef4444",
+  normal: "#25b5d8", // cyan
+  watch: "#ff9a70", // light orange, drawn dashed on the map
+  flooding: "#ff6b35", // alert orange
 };
 
 export interface Alert {
