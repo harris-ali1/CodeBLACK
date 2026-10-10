@@ -25,15 +25,11 @@ export default function MapPage() {
     <div className="grid h-[calc(100vh-3.5rem)] grid-cols-1 lg:grid-cols-[1fr_360px]">
       <div className="relative">
         <MapContainer center={HOUSTON} zoom={11} className="h-full w-full bg-zinc-900!" zoomControl={false}>
-          {/* Dark basemap (Esri, no API key needed) + street/place labels on top */}
+          {/* CARTO dark basemap (OpenStreetMap data) */}
           <TileLayer
-            attribution="Tiles &copy; Esri &mdash; Esri, HERE, Garmin, OpenStreetMap contributors"
-            url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
-            maxZoom={16}
-          />
-          <TileLayer
-            url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}"
-            maxZoom={16}
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
+            url="https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=cb1_4gm9_1_8794dbea55a0f8c75afeece8"
+            maxZoom={18}
           />
           <FlyToGauge gaugeId={focusId} />
           {MOCK_GAUGES.map((g) => (
