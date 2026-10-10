@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { Navigate, useLocation } from "react-router-dom";
 import { motion } from "motion/react";
 import { ArrowRight, MapPin, Languages, HeartHandshake } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FormDots } from "@/components/ui/form-dots";
 import { Globe } from "@/components/ui/globe";
 import { HOUSTON } from "@/lib/mock-data";
+import { useAuth } from "@/components/auth-provider";
 
 const ease = [0.25, 0.1, 0.25, 1] as const;
 const HOUSTON_ONLY = ["houston"];
@@ -30,9 +32,16 @@ const inputClass =
 const labelClass = "text-xs font-semibold uppercase tracking-widest text-navy-500";
 
 export default function Profile() {
+  const { user, loading } = useAuth();
+  const location = useLocation();
   const [needs, setNeeds] = useState<string[]>([]);
   const toggle = (id: string) =>
     setNeeds((n) => (n.includes(id) ? n.filter((x) => x !== id) : [...n, id]));
+
+  if (loading) return <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center text-navy-400">Loading your profile…</div>;
+  if (!user) return <Navigate to="/auth" replace state={{ from: location.pathname }} />;
+
+  const displayName = typeof user.user_metadata.full_name === "string" ? user.user_metadata.full_name : "FloodLine member";
 
   return (
     <section className="relative overflow-hidden py-16">
@@ -43,7 +52,7 @@ export default function Profile() {
           </span>
           <h1 className="text-4xl font-bold text-white md:text-5xl">Set up your alerts</h1>
           <p className="max-w-md text-navy-400">
-            Takes 30 seconds. FloodLine remembers this, so you never have to repeat yourself in an emergency.
+            Signed in as {displayName} · {user.email}. Set your household details for personal alerts.
           </p>
         </div>
 
@@ -103,7 +112,7 @@ export default function Profile() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-2">
                 <label className={labelClass}>Full name</label>
-                <input type="text" placeholder="Maria Lopez" className={inputClass} />
+                <input type="text" defaultValue={displayName === "FloodLine member" ? "" : displayName} placeholder="Maria Lopez" className={inputClass} />
               </div>
               <div className="flex flex-col gap-2">
                 <label className={labelClass}>Language</label>
