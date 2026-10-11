@@ -296,7 +296,7 @@ export function Globe({
       if (d3.geoDistance(lonLat, center) > Math.PI / 2) continue;
       const p = projection(lonLat);
       if (!p) continue;
-      const color = m.color || "#38bdf8";
+      const color = m.color || "#25b5d8";
       const pulse = svg.append("circle").attr("cx", p[0]).attr("cy", p[1]).attr("fill", color);
       pulse.append("animate").attr("attributeName", "r").attr("values", "3;14").attr("dur", "1.6s").attr("repeatCount", "indefinite");
       pulse.append("animate").attr("attributeName", "opacity").attr("values", "0.6;0").attr("dur", "1.6s").attr("repeatCount", "indefinite");

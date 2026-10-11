@@ -2,8 +2,11 @@
 // voice agent, just typed instead of spoken. Useful when someone can't talk or
 // hear: deaf / hard of hearing, a loud shelter, or a situation where they need
 // to stay quiet.
+//
+// Guests get a limited number of questions (`guestLimit`); signed-in users are unlimited.
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Loader2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowUp, Loader2, Lock } from "lucide-react";
 import {
   ConversationProvider,
   useConversationControls,
@@ -16,18 +19,37 @@ const AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID as string | undefined;
 
 const SUGGESTIONS = ["Is Brays Bayou flooding?", "Which bayous are at risk?", "¿Debo salir de casa?"];
 
+// Remembers how many free questions a guest has used, so a page refresh doesn't reset it
+const GUEST_COUNT_KEY = "floodline_guest_questions";
+const readGuestCount = () => {
+  try {
+    return Number(localStorage.getItem(GUEST_COUNT_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+};
+const writeGuestCount = (n: number) => {
+  try {
+    localStorage.setItem(GUEST_COUNT_KEY, String(n));
+  } catch {
+    /* storage blocked: the limit still applies for this page view */
+  }
+};
+
 type ChatMessage = { role: "user" | "agent"; text: string };
 
 interface ChatAgentProps {
   onFocusGauge?: (gaugeId: string) => void;
   householdNotes?: string;
+  /** Max questions before asking the user to sign in. Omit for unlimited (signed-in users). */
+  guestLimit?: number;
   className?: string;
 }
 
 export default function ChatAgent(props: ChatAgentProps) {
   if (!AGENT_ID) {
     return (
-      <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300">
+      <p className="rounded-xl border border-alert-500/30 bg-alert-500/10 p-3 text-sm text-alert-300">
         Add VITE_ELEVENLABS_AGENT_ID to .env.local and restart the dev server.
       </p>
     );
@@ -39,14 +61,19 @@ export default function ChatAgent(props: ChatAgentProps) {
   );
 }
 
-function ChatAgentInner({ onFocusGauge, householdNotes = "none provided", className }: ChatAgentProps) {
+function ChatAgentInner({ onFocusGauge, householdNotes = "none provided", guestLimit, className }: ChatAgentProps) {
   const { startSession, endSession, sendUserMessage } = useConversationControls();
   const { status, message: errorMessage } = useConversationStatus();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [waiting, setWaiting] = useState(false);
+  const [used, setUsed] = useState(() => (guestLimit !== undefined ? readGuestCount() : 0));
   const pending = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const isGuest = guestLimit !== undefined;
+  const remaining = isGuest ? Math.max(0, guestLimit - used) : Infinity;
+  const locked = isGuest && remaining === 0;
 
   useFloodTools(onFocusGauge);
 
@@ -56,14 +83,20 @@ function ChatAgentInner({ onFocusGauge, householdNotes = "none provided", classN
   // Keep the newest message in view
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, waiting]);
+  }, [messages, waiting, locked]);
 
   const send = (raw: string) => {
     const text = raw.trim();
-    if (!text) return;
+    if (!text || locked || waiting) return;
     setInput("");
     setMessages((m) => [...m, { role: "user", text }]);
     setWaiting(true);
+
+    if (isGuest) {
+      const next = used + 1;
+      setUsed(next);
+      writeGuestCount(next);
+    }
 
     if (status === "connected") {
       sendUserMessage(text);
@@ -95,19 +128,24 @@ function ChatAgentInner({ onFocusGauge, householdNotes = "none provided", classN
     });
   };
 
+  // Once the last free answer has arrived, close the session
+  useEffect(() => {
+    if (locked && !waiting && status === "connected") endSession();
+  }, [locked, waiting, status, endSession]);
+
   const connecting = status === "connecting";
 
   return (
     <div className={cn("flex w-full flex-col gap-3", className)}>
       <div ref={scrollRef} className="flex max-h-72 min-h-40 flex-col gap-2 overflow-y-auto text-left text-sm">
-        {messages.length === 0 && (
+        {messages.length === 0 && !locked && (
           <div className="flex flex-col gap-2">
-            <p className="text-center text-xs text-zinc-500">Ask in English or Spanish</p>
+            <p className="text-center text-xs text-navy-500">Ask in English or Spanish</p>
             {SUGGESTIONS.map((s) => (
               <button
                 key={s}
                 onClick={() => send(s)}
-                className="rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-left text-zinc-300 transition-colors hover:border-sky-500/40 hover:text-white"
+                className="rounded-xl border border-navy-800 bg-navy-950/60 px-3 py-2 text-left text-navy-300 transition-colors hover:border-cyan-500/40 hover:text-white"
               >
                 {s}
               </button>
@@ -120,7 +158,7 @@ function ChatAgentInner({ onFocusGauge, householdNotes = "none provided", classN
             key={i}
             className={cn(
               "max-w-[85%] whitespace-pre-wrap rounded-xl px-3 py-2",
-              m.role === "agent" ? "self-start bg-zinc-800/80 text-zinc-200" : "self-end bg-sky-500/15 text-sky-100",
+              m.role === "agent" ? "self-start bg-navy-800/80 text-navy-200" : "self-end bg-cyan-500/15 text-cyan-100",
             )}
           >
             {m.text}
@@ -128,36 +166,67 @@ function ChatAgentInner({ onFocusGauge, householdNotes = "none provided", classN
         ))}
 
         {(waiting || connecting) && (
-          <p className="flex items-center gap-2 self-start px-1 text-xs text-zinc-500">
+          <p className="flex items-center gap-2 self-start px-1 text-xs text-navy-500">
             <Loader2 className="h-3 w-3 animate-spin" /> FloodLine is typing…
           </p>
         )}
+
+        {locked && !waiting && (
+          <div className="mt-1 flex flex-col items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-4 text-center">
+            <Lock className="h-4 w-4 text-cyan-300" />
+            <p className="text-sm font-medium text-white">You've used your {guestLimit} free questions</p>
+            <p className="text-xs text-navy-400">
+              Sign in to keep chatting, talk to FloodLine by voice, and get alerts for your home.
+            </p>
+            <Link
+              to="/auth"
+              state={{ from: "/map" }}
+              className="mt-1 rounded-lg bg-cyan-400 px-4 py-1.5 text-sm font-bold text-navy-950 hover:bg-cyan-300"
+            >
+              Sign in to continue
+            </Link>
+          </div>
+        )}
       </div>
 
-      {status === "error" && errorMessage && <p className="text-xs text-red-400">{errorMessage}</p>}
+      {status === "error" && errorMessage && <p className="text-xs text-alert-300">{errorMessage}</p>}
 
       <form
         onSubmit={(e) => {
           e.preventDefault();
           send(input);
         }}
-        className="flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800/60 p-1.5 pl-3 focus-within:border-sky-500/50"
+        className={cn(
+          "flex items-center gap-2 rounded-xl border border-navy-700 bg-navy-800/60 p-1.5 pl-3 focus-within:border-cyan-500/50",
+          locked && "opacity-50",
+        )}
       >
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type your question…"
-          className="min-w-0 flex-1 bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
+          disabled={locked}
+          placeholder={locked ? "Sign in to ask more" : "Type your question…"}
+          className="min-w-0 flex-1 bg-transparent text-sm text-navy-100 outline-none placeholder:text-navy-500 disabled:cursor-not-allowed"
         />
         <button
           type="submit"
-          disabled={!input.trim()}
+          disabled={!input.trim() || locked || waiting}
           aria-label="Send"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-zinc-900 transition-opacity disabled:opacity-30"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-400 text-navy-950 transition-opacity disabled:opacity-30"
         >
           <ArrowUp className="h-4 w-4" />
         </button>
       </form>
+
+      {isGuest && !locked && (
+        <p className="text-center text-xs text-navy-500">
+          {remaining} free {remaining === 1 ? "question" : "questions"} left ·{" "}
+          <Link to="/auth" state={{ from: "/map" }} className="text-cyan-400 hover:text-cyan-300">
+            Sign in
+          </Link>{" "}
+          for unlimited
+        </p>
+      )}
     </div>
   );
 }
