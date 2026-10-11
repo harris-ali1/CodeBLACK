@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, Circle, CircleMarker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { History, Keyboard, Loader2, LocateFixed, Mic, Radio } from "lucide-react";
+import { History, Keyboard, Loader2, LocateFixed, Mic, Pause, Play, Radio } from "lucide-react";
 import VoiceAgent from "@/components/voice-agent";
 import ChatAgent from "@/components/chat-agent";
 import { HOUSTON } from "@/lib/mock-data";
 import { LIVE_RISK_COLOR, sortByDistance, sortBySeverity, timeAgo, useGauges, type Gauge } from "@/lib/gauges";
+import { gaugesAtHour, replayTimeLabel, useBerylReplay } from "@/lib/beryl";
 import { useLocation } from "@/lib/use-location";
 import { cn } from "@/lib/utils";
 import { TILES, useMapTheme } from "@/lib/use-map-theme";
@@ -36,15 +37,36 @@ function FlyToUser({ coords }: { coords: [number, number] | null }) {
 
 export default function MapPage() {
   const mapTheme = useMapTheme();
-  const { gauges, loading, error, updatedAt } = useGauges();
+  const { gauges: liveGauges, loading, error, updatedAt } = useGauges();
   const location = useLocation();
-  const sorted: (Gauge & { distanceMi?: number })[] = location.coords
-    ? sortByDistance(gauges, location.coords)
-    : sortBySeverity(gauges);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [mode, setMode] = useState<"talk" | "type">("talk");
   const [replay, setReplay] = useState(false);
   const [hour, setHour] = useState(0); // 0–47 hours into the Beryl replay
+  const [playing, setPlaying] = useState(false);
+  const beryl = useBerylReplay(replay);
+
+  // Step through the replay one hour at a time, stopping at the end
+  useEffect(() => {
+    if (!playing) return;
+    const id = setInterval(() => {
+      setHour((h) => {
+        if (h >= 47) {
+          setPlaying(false);
+          return h;
+        }
+        return h + 1;
+      });
+    }, 600);
+    return () => clearInterval(id);
+  }, [playing]);
+
+  // Live NOAA gauges, or the Beryl gauges as they were at the chosen hour
+  const gauges: Gauge[] = replay ? (beryl.data ? gaugesAtHour(beryl.data, hour) : []) : liveGauges;
+  const sorted: (Gauge & { distanceMi?: number })[] = location.coords
+    ? sortByDistance(gauges, location.coords)
+    : sortBySeverity(gauges);
+  const replayLabel = beryl.data ? replayTimeLabel(beryl.data, hour) : "";
 
   return (
     <div className="grid h-[calc(100vh-3.5rem)] grid-cols-1 lg:grid-cols-[1fr_360px]">
@@ -96,7 +118,7 @@ export default function MapPage() {
                 {g.levelFt !== null ? `${g.levelFt} ft` : "No current reading"}
                 {g.floodStageFt !== null && ` · flood stage ${g.floodStageFt} ft`}
                 <br />
-                <span style={{ opacity: 0.7 }}>Updated {timeAgo(g.observedAt)}</span>
+                <span style={{ opacity: 0.7 }}>{replay ? replayLabel : `Updated ${timeAgo(g.observedAt)}`}</span>
               </Popup>
             </CircleMarker>
           ))}
@@ -106,7 +128,10 @@ export default function MapPage() {
         <div className="absolute left-4 top-4 z-[500] flex flex-col gap-3 rounded-2xl border border-navy-800 bg-navy-950/90 p-3 backdrop-blur">
           <div className="flex rounded-xl bg-navy-900 p-1 text-sm">
             <button
-              onClick={() => setReplay(false)}
+              onClick={() => {
+                setReplay(false);
+                setPlaying(false);
+              }}
               className={cn("flex items-center gap-1.5 rounded-lg px-3 py-1.5", !replay ? "bg-teal-600 text-white" : "text-navy-400")}
             >
               <Radio className="h-3.5 w-3.5" /> Live
@@ -135,17 +160,47 @@ export default function MapPage() {
             </p>
           )}
           {replay && (
-            <label className="flex flex-col gap-1 text-xs text-navy-400">
-              Hour {hour} of 48 · Jul 8, 2024
-              <input
-                type="range"
-                min={0}
-                max={47}
-                value={hour}
-                onChange={(e) => setHour(+e.target.value)}
-                className="accent-cyan-400"
-              />
-            </label>
+            <div className="flex w-64 flex-col gap-2 text-xs text-navy-400">
+              {beryl.loading || (!beryl.data && !beryl.error) ? (
+                <p className="flex items-center gap-1.5 px-1">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Loading Hurricane Beryl data…
+                </p>
+              ) : beryl.error ? (
+                <p className="px-1 text-alert-300">Beryl data unavailable</p>
+              ) : (
+                <>
+                  <p className="px-1 text-sm font-semibold text-white">{replayLabel}</p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        if (!playing && hour >= 47) setHour(0);
+                        setPlaying((p) => !p);
+                      }}
+                      aria-label={playing ? "Pause replay" : "Play replay"}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-400 text-navy-950 hover:bg-cyan-300"
+                    >
+                      {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                    </button>
+                    <input
+                      type="range"
+                      min={0}
+                      max={47}
+                      value={hour}
+                      onChange={(e) => {
+                        setPlaying(false);
+                        setHour(+e.target.value);
+                      }}
+                      aria-label="Hours into Hurricane Beryl"
+                      className="w-full accent-cyan-400"
+                    />
+                  </div>
+                  <p className="px-1">
+                    Hour {hour} of 48 ·{" "}
+                    <span className="text-alert-300">{gauges.filter((g) => g.risk === "flooding").length} flooding</span>
+                  </p>
+                </>
+              )}
+            </div>
           )}
         </div>
 
@@ -219,7 +274,7 @@ export default function MapPage() {
 
         <div className="flex flex-col gap-2">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-navy-500">
-            Live gauges {gauges.length > 0 && `(${gauges.length})`}
+            {replay ? "Beryl gauges" : "Live gauges"} {gauges.length > 0 && `(${gauges.length})`}
             {location.coords && <span className="normal-case tracking-normal text-cyan-400"> · nearest first</span>}
           </h3>
           {sorted.map((g) => (
@@ -239,7 +294,7 @@ export default function MapPage() {
                 <p className="text-sm text-navy-200">{g.name}</p>
                 <p className="text-xs text-navy-500">
                   {g.levelFt !== null ? `${g.levelFt} ft` : "No reading"}
-                  {g.floodStageFt !== null && ` / flood ${g.floodStageFt} ft`} · {timeAgo(g.observedAt)}
+                  {g.floodStageFt !== null && ` / flood ${g.floodStageFt} ft`} · {replay ? "Beryl replay" : timeAgo(g.observedAt)}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2 pl-2">
