@@ -1,88 +1,46 @@
 import { useState } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { LoaderCircle, LogIn, UserPlus } from "lucide-react";
+import { LogIn, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/components/auth-provider";
-import { supabase } from "@/lib/supabase";
 
 const inputClass =
   "w-full rounded-xl border border-zinc-700 bg-zinc-800/60 px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none transition-all focus:border-sky-500/50 focus:ring-2 focus:ring-sky-500/10";
 
 export default function Auth() {
-  const { user, loading, configured } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
-  const [message, setMessage] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  if (loading) return <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center text-zinc-400">Loading account…</div>;
-  if (user) return <Navigate to="/profile" replace />;
-
-  const destination = (location.state as { from?: string } | null)?.from ?? "/profile";
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!supabase) return;
-    setSubmitting(true);
-    setMessage("");
-
-    const result = mode === "signin"
-      ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({
-          email,
-          password,
-          options: { data: { full_name: name } },
-        });
-
-    setSubmitting(false);
-    if (result.error) {
-      setMessage(result.error.message);
-      return;
-    }
-    if (mode === "signup" && !result.data.session) {
-      setMessage("Check your email to confirm your account, then sign in.");
-      return;
-    }
-    navigate(destination, { replace: true });
-  };
+  const [mode, setMode] = useState<"login" | "signup">("login");
 
   return (
     <section className="mx-auto flex min-h-[calc(100vh-3.5rem)] max-w-md items-center px-4 py-12">
-      <form onSubmit={submit} className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 p-6 sm:p-8">
-        <div className="mb-7">
-          <span className="text-sm font-medium text-sky-400">FloodLine account</span>
-          <h1 className="mt-2 text-3xl font-bold text-white">{mode === "signin" ? "Welcome back" : "Create your account"}</h1>
-          <p className="mt-2 text-sm leading-relaxed text-zinc-400">
-            {mode === "signin" ? "Sign in to see your household alerts." : "Save your household details and receive tailored alerts."}
-          </p>
+      <form onSubmit={(event) => event.preventDefault()} className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 p-6 sm:p-8">
+        <span className="text-sm font-medium text-sky-400">FloodLine account</span>
+        <h1 className="mt-2 text-3xl font-bold text-white">
+          {mode === "login" ? "Welcome back" : "Create your account"}
+        </h1>
+        <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+          {mode === "login" ? "Sign in to view your flood alerts." : "Create an account for tailored flood alerts."}
+        </p>
+
+        <div className="mt-6 flex rounded-xl bg-zinc-800 p-1 text-sm">
+          <button type="button" onClick={() => setMode("login")} className={`flex-1 rounded-lg py-2 transition-colors ${mode === "login" ? "bg-zinc-700 text-white" : "text-zinc-400"}`}>
+            Log in
+          </button>
+          <button type="button" onClick={() => setMode("signup")} className={`flex-1 rounded-lg py-2 transition-colors ${mode === "signup" ? "bg-zinc-700 text-white" : "text-zinc-400"}`}>
+            Sign up
+          </button>
         </div>
 
-        {!configured ? (
-          <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-200">
-            Authentication needs Supabase configuration. Add the project URL and anonymous key to <code>.env.local</code> using <code>.env.example</code> as a guide.
-          </p>
-        ) : (
-          <>
-            <div className="flex rounded-xl bg-zinc-800 p-1 text-sm">
-              <button type="button" onClick={() => setMode("signin")} className={`flex-1 rounded-lg py-2 ${mode === "signin" ? "bg-zinc-700 text-white" : "text-zinc-400"}`}>Sign in</button>
-              <button type="button" onClick={() => setMode("signup")} className={`flex-1 rounded-lg py-2 ${mode === "signup" ? "bg-zinc-700 text-white" : "text-zinc-400"}`}>Sign up</button>
-            </div>
-            <div className="mt-5 flex flex-col gap-4">
-              {mode === "signup" && <input required value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" className={inputClass} />}
-              <input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email address" className={inputClass} />
-              <input required type="password" minLength={6} autoComplete={mode === "signin" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password (at least 6 characters)" className={inputClass} />
-            </div>
-            {message && <p className="mt-4 text-sm text-sky-300" role="status">{message}</p>}
-            <Button disabled={submitting} className="mt-6 h-11 w-full rounded-xl bg-white text-zinc-900 hover:bg-zinc-100">
-              {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : mode === "signin" ? <LogIn className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
-              {submitting ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
-            </Button>
-          </>
-        )}
+        <div className="mt-5 flex flex-col gap-4">
+          <input type="email" placeholder="Email address" className={inputClass} />
+          <input type="password" placeholder="Password" className={inputClass} />
+          {mode === "signup" && <input type="text" placeholder="Home address" className={inputClass} />}
+          {mode === "signup" && <input type="tel" placeholder="Phone number" className={inputClass} />}
+        </div>
+
+        <Button type="submit" className="mt-6 h-11 w-full rounded-xl bg-white text-zinc-900 hover:bg-zinc-100">
+          {mode === "login" ? <LogIn className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+          {mode === "login" ? "Log in" : "Create account"}
+        </Button>
+
+        <p className="mt-4 text-center text-xs text-zinc-500">Account functionality will be connected by the database team.</p>
       </form>
     </section>
   );
