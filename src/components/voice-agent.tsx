@@ -6,12 +6,11 @@ import { motion } from "motion/react";
 import { Mic, PhoneOff, Loader2 } from "lucide-react";
 import {
   ConversationProvider,
-  useConversationClientTool,
   useConversationControls,
   useConversationMode,
   useConversationStatus,
 } from "@elevenlabs/react";
-import { getFloodStatus } from "@/lib/voice-tools";
+import { useFloodTools } from "@/lib/use-flood-tools";
 import { cn } from "@/lib/utils";
 
 const AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID as string | undefined;
@@ -56,11 +55,7 @@ function VoiceAgentInner({ onFocusGauge, householdNotes = "none provided", class
   const connecting = status === "connecting";
 
   // Client tools. Names must match the tools configured on the agent.
-  useConversationClientTool("get_flood_status", (params: { location?: string }) => getFloodStatus(params));
-  useConversationClientTool("focus_gauge", (params: { gauge_id?: string }) => {
-    if (params.gauge_id) onFocusGauge?.(params.gauge_id);
-    return "Map is now showing that gauge.";
-  });
+  useFloodTools(onFocusGauge);
 
   // Drive the orb size from live audio volume
   useEffect(() => {
