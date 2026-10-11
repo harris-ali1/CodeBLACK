@@ -1,12 +1,14 @@
-import { useState } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { useEffect, useState, type FormEvent } from "react";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { ArrowRight, MapPin, Languages, HeartHandshake } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { FormDots } from "@/components/ui/form-dots";
 import { Globe } from "@/components/ui/globe";
 import { HOUSTON } from "@/lib/mock-data";
 import { useAuth } from "@/components/auth-provider";
+import { supabase } from "@/lib/supabase";
 
 const ease = [0.25, 0.1, 0.25, 1] as const;
 const HOUSTON_ONLY = ["houston"];
@@ -34,9 +36,72 @@ const labelClass = "text-xs font-semibold uppercase tracking-widest text-navy-50
 export default function Profile() {
   const { user, loading } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Form state
+  const [fullName, setFullName] = useState("");
+  const [language, setLanguage] = useState("en");
+  const [address, setAddress] = useState("");
   const [needs, setNeeds] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const toggle = (id: string) =>
     setNeeds((n) => (n.includes(id) ? n.filter((x) => x !== id) : [...n, id]));
+
+  // Prefill the form with anything the user saved before
+  useEffect(() => {
+    if (!user || !supabase) return;
+    const metaName =
+      typeof user.user_metadata.full_name === "string" ? user.user_metadata.full_name : "";
+
+    supabase
+      .from("profiles")
+      .select("full_name, language, address, household_needs")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setFullName(data?.full_name ?? metaName);
+        if (data?.language) setLanguage(data.language);
+        if (data?.address) setAddress(data.address);
+        if (data?.household_needs) setNeeds(data.household_needs);
+      });
+  }, [user]);
+
+  // Save to Supabase → show notification → go to the map
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!user) return;
+    if (!supabase) {
+      setError("Supabase isn't configured. Check .env.local.");
+      return;
+    }
+    if (!address.trim()) {
+      setError("Please enter your home address so we know which gauges to watch.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    const { error } = await supabase.from("profiles").upsert({
+      id: user.id,
+      full_name: fullName.trim(),
+      language,
+      address: address.trim(),
+      household_needs: needs,
+    });
+
+    setSaving(false);
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    toast.success("Alerts activated!");
+    navigate("/map");
+  };
 
   if (loading) return <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center text-navy-400">Loading your profile…</div>;
   if (!user) return <Navigate to="/auth" replace state={{ from: location.pathname }} />;
@@ -96,7 +161,7 @@ export default function Profile() {
 
           {/* Right: form */}
           <motion.form
-            onSubmit={(e) => e.preventDefault()}
+            onSubmit={handleSubmit}
             initial={{ opacity: 0, y: 28 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 1, delay: 0.35, ease }}
@@ -112,11 +177,21 @@ export default function Profile() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-2">
                 <label className={labelClass}>Full name</label>
-                <input type="text" defaultValue={displayName === "FloodLine member" ? "" : displayName} placeholder="Maria Lopez" className={inputClass} />
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Maria Lopez"
+                  className={inputClass}
+                />
               </div>
               <div className="flex flex-col gap-2">
                 <label className={labelClass}>Language</label>
-                <select className={inputClass} defaultValue="en">
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  className={inputClass}
+                >
                   <option value="en">English</option>
                   <option value="es">Español</option>
                 </select>
@@ -125,7 +200,13 @@ export default function Profile() {
 
             <div className="flex flex-col gap-2">
               <label className={labelClass}>Home address</label>
-              <input type="text" placeholder="5600 Braeswood Blvd, Houston, TX 77096" className={inputClass} />
+              <input
+                type="text"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="5600 Braeswood Blvd, Houston, TX 77096"
+                className={inputClass}
+              />
             </div>
 
             <div className="flex flex-col gap-2">
@@ -151,9 +232,15 @@ export default function Profile() {
               </div>
             </div>
 
-            <Button type="submit" className="group h-11 w-fit rounded-xl bg-cyan-400 px-8 text-sm font-bold text-navy-950 hover:bg-cyan-300">
-              Save and start alerts
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+            {error && <p className="text-sm text-red-400">{error}</p>}
+
+            <Button
+              type="submit"
+              disabled={saving}
+              className="group h-11 w-fit rounded-xl bg-cyan-400 px-8 text-sm font-bold text-navy-950 hover:bg-cyan-300 disabled:opacity-60"
+            >
+              {saving ? "Saving…" : "Save and start alerts"}
+              {!saving && <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />}
             </Button>
           </motion.form>
         </div>
