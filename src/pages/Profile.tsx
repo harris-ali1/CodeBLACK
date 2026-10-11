@@ -1,71 +1,79 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
-import { ArrowRight, MapPin, Languages, HeartHandshake } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { FormDots } from "@/components/ui/form-dots";
-import { Globe } from "@/components/ui/globe";
-import { HOUSTON } from "@/lib/mock-data";
+import { AddressInput } from "@/components/address-input";
+import { ALERT_RADIUS_MI, useFloodAlarm } from "@/components/flood-alarm";
 import { useAuth } from "@/components/auth-provider";
+import { geocodeAddress, type Place } from "@/lib/address-search";
+import { formatPhone, toE164 } from "@/lib/phone";
 import { supabase } from "@/lib/supabase";
 
 const ease = [0.25, 0.1, 0.25, 1] as const;
-const HOUSTON_ONLY = ["houston"];
-const HOUSTON_MARKER = [{ coords: HOUSTON }];
-
-const WHY = [
-  { icon: MapPin, label: "Your address tells us which bayou gauges matter to you." },
-  { icon: Languages, label: "Alerts are spoken in the language you choose." },
-  { icon: HeartHandshake, label: "Household needs help us prioritize who to warn first." },
-];
-
-const NEEDS = [
-  { id: "elderly", label: "Elderly resident" },
-  { id: "no_car", label: "No car" },
-  { id: "pets", label: "Pets" },
-  { id: "medical", label: "Medical equipment" },
-  { id: "mobility", label: "Limited mobility" },
-  { id: "children", label: "Young children" },
-];
 
 const inputClass =
   "w-full rounded-xl border border-navy-700 bg-navy-800/60 px-4 py-2.5 text-sm text-navy-200 placeholder:text-navy-600 outline-none transition-all focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/10";
 const labelClass = "text-xs font-semibold uppercase tracking-widest text-navy-500";
 
+// Postgres / PostgREST codes for "that column doesn't exist" (the phone migration hasn't been run yet)
+const isMissingColumn = (e: { code?: string; message?: string }) =>
+  e.code === "42703" || e.code === "PGRST204" || /phone|call_consent|dependents|address_lat|address_lon/.test(e.message ?? "");
+
 export default function Profile() {
   const { user, loading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const { reloadPrefs } = useFloodAlarm();
 
   // Form state
   const [fullName, setFullName] = useState("");
   const [language, setLanguage] = useState("en");
   const [address, setAddress] = useState("");
-  const [needs, setNeeds] = useState<string[]>([]);
+  // Coordinates for the address: from a picked suggestion, the saved profile, or looked up when saving
+  const [home, setHome] = useState<{ label: string; lat: number; lon: number } | null>(null);
+  const [phone, setPhone] = useState("");
+  const [callConsent, setCallConsent] = useState(false);
+  const [dependents, setDependents] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const toggle = (id: string) =>
-    setNeeds((n) => (n.includes(id) ? n.filter((x) => x !== id) : [...n, id]));
 
   // Prefill the form with anything the user saved before
   useEffect(() => {
     if (!user || !supabase) return;
+    const client = supabase;
     const metaName =
       typeof user.user_metadata.full_name === "string" ? user.user_metadata.full_name : "";
 
-    supabase
-      .from("profiles")
-      .select("full_name, language, address, household_needs")
-      .eq("id", user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        setFullName(data?.full_name ?? metaName);
-        if (data?.language) setLanguage(data.language);
-        if (data?.address) setAddress(data.address);
-        if (data?.household_needs) setNeeds(data.household_needs);
-      });
+    const load = async () => {
+      let res = await client
+        .from("profiles")
+        .select("full_name, language, address, phone, call_consent, dependents, address_lat, address_lon")
+        .eq("id", user.id)
+        .maybeSingle();
+      // Database without the phone columns yet: load the rest
+      if (res.error && isMissingColumn(res.error)) {
+        res = (await client
+          .from("profiles")
+          .select("full_name, language, address")
+          .eq("id", user.id)
+          .maybeSingle()) as typeof res;
+      }
+      const data = res.data;
+      setFullName(data?.full_name ?? metaName);
+      if (data?.language) setLanguage(data.language);
+      if (data?.address) {
+        setAddress(data.address);
+        if (data.address_lat != null && data.address_lon != null)
+          setHome({ label: data.address, lat: data.address_lat, lon: data.address_lon });
+      }
+      if (data?.phone) setPhone(formatPhone(data.phone));
+      if (data?.call_consent) setCallConsent(true);
+      if (data?.dependents) setDependents(data.dependents);
+    };
+    void load();
   }, [user]);
 
   // Save to Supabase → show notification → go to the map
@@ -80,17 +88,50 @@ export default function Profile() {
       setError("Please enter your home address so we know which gauges to watch.");
       return;
     }
+    const e164 = phone.trim() ? toE164(phone) : null;
+    if (phone.trim() && !e164) {
+      setError("Enter a 10-digit US phone number, like (713) 555-0123.");
+      return;
+    }
+    if (callConsent && !e164) {
+      setError("Add your phone number so we can call you.");
+      return;
+    }
 
     setSaving(true);
     setError(null);
 
-    const { error } = await supabase.from("profiles").upsert({
-      id: user.id,
-      full_name: fullName.trim(),
-      language,
-      address: address.trim(),
-      household_needs: needs,
+    // Work out where the home is. A picked/saved address that hasn't been edited already has coordinates;
+    // otherwise confirm what was typed with the Census geocoder.
+    const text = address.trim();
+    let coords = home && home.label === text ? { lat: home.lat, lon: home.lon } : null;
+    if (!coords) {
+      const g = await geocodeAddress(text);
+      if (g.status === "none") {
+        setSaving(false);
+        setError("We couldn't find that address. Check the street number and spelling, or pick one from the suggestions.");
+        return;
+      }
+      if (g.status === "found") coords = { lat: g.lat, lon: g.lon };
+      // "error" (geocoder unreachable): save anyway, without coordinates
+    }
+
+    const base = { id: user.id, full_name: fullName.trim(), language, address: text };
+    let { error } = await supabase.from("profiles").upsert({
+      ...base,
+      phone: e164,
+      call_consent: callConsent,
+      dependents: dependents.trim() || null,
+      address_lat: coords?.lat ?? null,
+      address_lon: coords?.lon ?? null,
     });
+
+    // The database doesn't have the phone columns yet: still save everything else
+    let phoneSkipped = false;
+    if (error && isMissingColumn(error)) {
+      phoneSkipped = true;
+      ({ error } = await supabase.from("profiles").upsert(base));
+    }
 
     setSaving(false);
 
@@ -99,7 +140,12 @@ export default function Profile() {
       return;
     }
 
-    toast.success("Alerts activated!");
+    reloadPrefs();
+    if (phoneSkipped) {
+      toast.warning("Saved, but phone and dependents need the database update first (see the new migration).");
+    } else {
+      toast.success("Alerts activated!");
+    }
     navigate("/map");
   };
 
@@ -111,139 +157,124 @@ export default function Profile() {
   return (
     <section className="relative overflow-hidden py-16">
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        <div className="mb-12 flex flex-col items-center gap-4 text-center">
+        <div className="mb-10 flex flex-col items-center gap-4 text-center">
           <span className="inline-flex items-center rounded-full border border-cyan-400/30 bg-cyan-500/10 px-4 py-1.5 text-sm font-medium text-cyan-400">
             Your household
           </span>
           <h1 className="text-4xl font-bold text-white md:text-5xl">Set up your alerts</h1>
           <p className="max-w-md text-navy-400">
-            Signed in as {displayName} · {user.email}. Set your household details for personal alerts.
+            Signed in as {displayName} · {user.email}. Your address picks which gauges to watch.
           </p>
         </div>
 
-        <div className="mx-auto grid max-w-5xl grid-cols-1 items-start gap-10 lg:grid-cols-2">
-          {/* Left: why we ask + globe */}
-          <motion.div
-            initial={{ opacity: 0, y: 28 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1, delay: 0.2, ease }}
-            className="flex flex-col gap-6"
-          >
-            <div className="flex flex-col gap-1">
-              <h2 className="text-xl font-semibold text-white">Why we ask</h2>
-              <p className="max-w-xs text-sm leading-relaxed text-navy-400">
-                Everything stays private and is only used to personalize your alerts.
-              </p>
-            </div>
-            <div className="flex flex-col gap-3">
-              {WHY.map(({ icon: Icon, label }) => (
-                <div key={label} className="flex items-center gap-3 text-sm text-navy-400">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-navy-700 bg-navy-800/80">
-                    <Icon className="h-3.5 w-3.5 text-cyan-400" />
-                  </div>
-                  {label}
-                </div>
-              ))}
-            </div>
-            <div className="relative h-52 overflow-hidden text-navy-500">
-              <Globe
-                className="absolute left-0 top-0 aspect-square w-full max-w-full"
-                variant="wireframesolid"
-                strokeWidth={0.6}
-                initialRotation={[-200, 0]}
-                rotateCities={HOUSTON_ONLY}
-                rotationSpeed={5000}
-                markers={HOUSTON_MARKER}
-              />
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-linear-to-t from-navy-950 to-transparent" />
-            </div>
-          </motion.div>
+        <motion.form
+          onSubmit={handleSubmit}
+          initial={{ opacity: 0, y: 28 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease }}
+          className="mx-auto flex max-w-xl flex-col gap-5 rounded-2xl border border-navy-800 bg-navy-900 p-6 sm:p-8"
+        >
+          <div>
+            <h2 className="mb-0.5 text-lg font-semibold text-white">Your details</h2>
+            <p className="text-sm text-navy-400">Private to you. We only use this to send your alerts.</p>
+          </div>
 
-          {/* Right: form */}
-          <motion.form
-            onSubmit={handleSubmit}
-            initial={{ opacity: 0, y: 28 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1, delay: 0.35, ease }}
-            className="flex flex-col gap-5 rounded-2xl border border-navy-800 bg-navy-900 p-6 sm:p-8"
-          >
-            <div>
-              <h2 className="mb-0.5 text-lg font-semibold text-white">Household details</h2>
-              <p className="text-sm text-navy-400">We'll use these to tailor every alert.</p>
-            </div>
+          <FormDots />
 
-            <FormDots />
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-2">
-                <label className={labelClass}>Full name</label>
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Maria Lopez"
-                  className={inputClass}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className={labelClass}>Language</label>
-                <select
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                  className={inputClass}
-                >
-                  <option value="en">English</option>
-                  <option value="es">Español</option>
-                </select>
-              </div>
-            </div>
-
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
-              <label className={labelClass}>Home address</label>
+              <label htmlFor="full-name" className={labelClass}>Full name</label>
               <input
+                id="full-name"
                 type="text"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="5600 Braeswood Blvd, Houston, TX 77096"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Maria Lopez"
                 className={inputClass}
               />
             </div>
-
             <div className="flex flex-col gap-2">
-              <label className={labelClass}>Household needs</label>
-              <div className="grid grid-cols-2 gap-2">
-                {NEEDS.map(({ id, label }) => {
-                  const on = needs.includes(id);
-                  return (
-                    <button
-                      type="button"
-                      key={id}
-                      onClick={() => toggle(id)}
-                      className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${
-                        on
-                          ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-300"
-                          : "border-navy-700 bg-navy-800/60 text-navy-400 hover:text-navy-200"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
+              <label htmlFor="language" className={labelClass}>Language</label>
+              <select
+                id="language"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                className={inputClass}
+              >
+                <option value="en">English</option>
+                <option value="es">Español</option>
+              </select>
             </div>
+          </div>
 
-            {error && <p className="text-sm text-red-400">{error}</p>}
+          <div className="flex flex-col gap-2">
+            <label htmlFor="address" className={labelClass}>Home address</label>
+            <AddressInput
+              id="address"
+              value={address}
+              onChange={setAddress}
+              onPick={(p: Place) => setHome(p)}
+              placeholder="Start typing your street address"
+              className={inputClass}
+            />
+          </div>
 
-            <Button
-              type="submit"
-              disabled={saving}
-              className="group h-11 w-fit rounded-xl bg-cyan-400 px-8 text-sm font-bold text-navy-950 hover:bg-cyan-300 disabled:opacity-60"
-            >
-              {saving ? "Saving…" : "Save and start alerts"}
-              {!saving && <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />}
-            </Button>
-          </motion.form>
-        </div>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="phone" className={labelClass}>Phone number</label>
+            <input
+              id="phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="(713) 555-0123"
+              className={inputClass}
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label htmlFor="dependents" className={labelClass}>Who are you looking after?</label>
+            <textarea
+              id="dependents"
+              rows={3}
+              value={dependents}
+              onChange={(e) => setDependents(e.target.value)}
+              placeholder="e.g. My elderly mother, two kids (3 and 6), and a dog. Mom uses a walker."
+              className={`${inputClass} resize-none`}
+            />
+            <p className="text-xs text-navy-500">
+              Optional. We use this to tailor your alerts and our assistant's advice, for example when to leave early.
+            </p>
+          </div>
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-navy-700 bg-navy-800/60 p-4 text-sm">
+            <input
+              type="checkbox"
+              checked={callConsent}
+              onChange={(e) => setCallConsent(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-400"
+            />
+            <span>
+              <span className="block font-semibold text-white">Allow FloodLine to call me with flood alerts</span>
+              <span className="mt-1 block leading-relaxed text-navy-400">
+                If a gauge within {ALERT_RADIUS_MI} miles starts flooding, an automated call using an AI voice will
+                read you the warning, in your language. We only call for flood warnings, and you can turn this off here any time.
+              </span>
+            </span>
+          </label>
+
+          {error && <p className="text-sm text-alert-300">{error}</p>}
+
+          <Button
+            type="submit"
+            disabled={saving}
+            className="group h-11 w-fit rounded-xl bg-cyan-400 px-8 text-sm font-bold text-navy-950 hover:bg-cyan-300 disabled:opacity-60"
+          >
+            {saving ? "Saving…" : "Save and start alerts"}
+            {!saving && <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />}
+          </Button>
+        </motion.form>
       </div>
     </section>
   );

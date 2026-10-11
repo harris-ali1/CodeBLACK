@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { MapContainer, TileLayer, Circle, CircleMarker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { History, Keyboard, Loader2, LocateFixed, Mic, Pause, Play, Radio } from "lucide-react";
+import { BellRing, History, Keyboard, Loader2, LocateFixed, Mic, Pause, Play, Radio } from "lucide-react";
 import VoiceAgent from "@/components/voice-agent";
 import ChatAgent from "@/components/chat-agent";
 import { HOUSTON } from "@/lib/mock-data";
 import { LIVE_RISK_COLOR, sortByDistance, sortBySeverity, timeAgo, useGauges, type Gauge } from "@/lib/gauges";
 import { gaugesAtHour, replayTimeLabel, useBerylReplay } from "@/lib/beryl";
+import { useFloodAlarm } from "@/components/flood-alarm";
 import { useLocation } from "@/lib/use-location";
 import { cn } from "@/lib/utils";
 import { TILES, useMapTheme } from "@/lib/use-map-theme";
@@ -39,6 +42,21 @@ export default function MapPage() {
   const mapTheme = useMapTheme();
   const { gauges: liveGauges, loading, error, updatedAt } = useGauges();
   const location = useLocation();
+  const { prefs, prefsReady, testAlarm } = useFloodAlarm();
+  const navigate = useNavigate();
+  const householdNotes = prefs.dependents.trim() || undefined; // read by the ElevenLabs agent prompt
+  // Test alarm needs a home address and a phone number; if either is missing, send them to Profile to add it
+  const onTestAlarm = () => {
+    if (!prefsReady) return; // settings still loading
+    const missing = [!prefs.address.trim() && "home address", !prefs.phone && "phone number"].filter(Boolean);
+    if (missing.length > 0) {
+      toast.info(`Add your ${missing.join(" and ")} to test alerts.`);
+      navigate("/profile");
+      return;
+    }
+    testAlarm();
+  };
+
   const [focusId, setFocusId] = useState<string | null>(null);
   const [mode, setMode] = useState<"talk" | "type">("talk");
   const [replay, setReplay] = useState(false);
@@ -230,6 +248,15 @@ export default function MapPage() {
                   : "Use my location"}
         </button>
 
+        {/* Test the flood alarm (sample alarm, shelters and, if call alerts are on, a test call) */}
+        <button
+          onClick={onTestAlarm}
+          disabled={!prefsReady}
+          className="absolute right-4 top-16 z-[500] flex items-center gap-2 rounded-xl border border-navy-800 bg-navy-950/90 px-3 py-2 text-sm text-navy-300 backdrop-blur transition-colors hover:text-white disabled:opacity-60"
+        >
+          <BellRing className="h-4 w-4" /> Test alarm
+        </button>
+
         {/* Legend */}
         <div className="absolute bottom-4 left-4 z-[500] flex gap-3 rounded-xl border border-navy-800 bg-navy-950/90 px-3 py-2 text-xs text-navy-300">
           {(["normal", "watch", "flooding", "unknown"] as const).map((r) => (
@@ -265,10 +292,10 @@ export default function MapPage() {
           {mode === "talk" ? (
             <>
               <p className="mt-2 text-sm text-navy-400">"Is my street flooding?" · "¿Debo salir de casa?"</p>
-              <VoiceAgent className="mt-4" onFocusGauge={setFocusId} />
+              <VoiceAgent className="mt-4" onFocusGauge={setFocusId} householdNotes={householdNotes} />
             </>
           ) : (
-            <ChatAgent className="mt-3" onFocusGauge={setFocusId} />
+            <ChatAgent className="mt-3" onFocusGauge={setFocusId} householdNotes={householdNotes} />
           )}
         </div>
 

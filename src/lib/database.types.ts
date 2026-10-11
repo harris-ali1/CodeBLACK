@@ -41,18 +41,45 @@ export type Database = {
     Tables: {
       profiles: {
         Row: {
+          address: string | null
+          address_lat: number | null
+          address_lon: number | null
+          call_consent: boolean
           created_at: string | null
+          dependents: string | null
+          full_name: string | null
+          household_needs: string[]
           id: string
+          language: string
+          phone: string | null
           username: string | null
         }
         Insert: {
+          address?: string | null
+          address_lat?: number | null
+          address_lon?: number | null
+          call_consent?: boolean
           created_at?: string | null
+          dependents?: string | null
+          full_name?: string | null
+          household_needs?: string[]
           id: string
+          language?: string
+          phone?: string | null
           username?: string | null
         }
         Update: {
+          address?: string | null
+          address_lat?: number | null
+          address_lon?: number | null
+          call_consent?: boolean
           created_at?: string | null
+          dependents?: string | null
+          full_name?: string | null
+          household_needs?: string[]
           id?: string
+          language?: string
+          phone?: string | null
           username?: string | null
         }
         Relationships: []

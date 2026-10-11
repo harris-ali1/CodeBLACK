@@ -76,3 +76,30 @@ Restart `npm run dev`, open `/map`, tap the mic.
 
 - "Is Brays Bayou flooding?" → agent calls the tool, answers, and the map flies to Brays Bayou.
 - Switch to Español, then: "¿Hay inundaciones cerca de Buffalo Bayou?"
+## Phone-call alerts (outbound calls over Twilio)
+
+When a gauge within 20 miles of someone who ticked "Allow FloodLine to call me" starts flooding, the server asks ElevenLabs to phone them and read the warning (tailored to their dependents, with the nearest shelter).
+
+**1. Import your Twilio number.** Dashboard → Agents → **Phone Numbers** → Import. Enter a label, the Twilio number, and a Twilio SID + token (an API key SID starting `SK` is safest; the Account SID `AC…` + Auth Token also works). Copy the number's ID (starts with `phnum_`).
+
+**2. Make a separate agent for alert calls.** Duplicate the FloodLine agent and name it `FloodLine Alerts`. Keep the original for the on-screen mic, because the website doesn't send an `alert_message`. On the copy, set the **First message** to just:
+
+```
+{{alert_message}}
+```
+
+(The server already starts the message with "This is an automated flood warning from FloodLine." in the person's language, and with a "this is a test" line for test calls.)
+
+The server sends three dynamic variables with every call: `alert_message`, `preferred_language` and `household_notes`. If the dashboard asks for test values, use `Test warning`, `English` and `none provided`. Add a line to the system prompt such as: "You are placing an outbound call to warn someone about flooding. Read the warning, then answer questions about it. Keep it short."
+
+**3. Put the secrets in `.env.local`** (never in code or chat):
+
+```
+ELEVENLABS_API_KEY=sk_...
+ELEVENLABS_PHONE_NUMBER_ID=phnum_...
+ELEVENLABS_AGENT_ID=agent_...   # the "FloodLine Alerts" agent
+```
+
+Restart `npm run dev`. On the Profile page, add your address and number, tick the call checkbox and **Save**. Then open the map and click **Test alarm** (top right). Your phone should ring. If your address or number is missing, the button sends you to Profile to add it.
+
+On a Twilio trial account you can only call numbers verified in Twilio, and calls start with Twilio's trial message.

@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { LogOut, UserRound, Waves } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth-provider";
+import { FloodAlarmProvider } from "@/components/flood-alarm";
 
 const NAV = [
   { to: "/map", label: "Live Map" },
@@ -21,6 +22,7 @@ export default function Layout() {
 
   return (
     // "dark" here turns on every dark: variant in the app
+    <FloodAlarmProvider>
     <div className="dark min-h-screen bg-navy-950 text-navy-100">
       <header className="sticky top-0 z-[1000] border-b border-navy-800/80 bg-navy-950/80 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
@@ -65,5 +67,6 @@ export default function Layout() {
         <Outlet />
       </main>
     </div>
+    </FloodAlarmProvider>
   );
 }
