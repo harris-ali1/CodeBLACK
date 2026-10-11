@@ -8,3 +8,6 @@ export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
+
+
+  console.log("SUPABASE", supabaseUrl, supabaseAnonKey?.slice(0, 20));

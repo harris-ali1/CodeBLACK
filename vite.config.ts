@@ -1,24 +1,9 @@
 import path from 'node:path'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { defineConfig, loadEnv, type Plugin } from 'vite'
+import { defineConfig, loadEnv, type Plugin, type ProxyOptions } from 'vite'
 import { berylMiddleware } from './server/beryl-replay.mjs'
 import { createCaller } from './server/call.mjs'
-
-// Forwards /nwps/* to NOAA's National Water Prediction Service so the browser
-// doesn't hit CORS errors when loading live gauge data.
-// Same idea for the US Census geocoder (used to confirm home addresses).
-const nwpsProxy = {
-  '/nwps': {
-    target: 'https://api.water.noaa.gov',
-    changeOrigin: true,
-  },
-  '/census': {
-    target: 'https://geocoding.geo.census.gov',
-    changeOrigin: true,
-    rewrite: (p: string) => p.replace(/^\/census/, '/geocoder'),
-  },
-}
 
 // Small server-side APIs that run inside the Vite server. Secrets (DATABASE_URL,
 // ELEVENLABS_API_KEY) come from .env.local with no VITE_ prefix,
@@ -42,13 +27,39 @@ function serverApis(env: Record<string, string>): Plugin {
 }
 
 export default defineConfig(({ mode }) => {
+  // Loads ALL vars from .env.local (not just VITE_ ones). Only VITE_ vars ever
+  // reach the browser, so ELEVENLABS_API_KEY stays on the dev server.
   const env = loadEnv(mode, process.cwd(), '')
+
+  const proxy: Record<string, ProxyOptions> = {
+    // Live river gauges (NOAA). Avoids browser CORS errors.
+    '/nwps': {
+      target: 'https://api.water.noaa.gov',
+      changeOrigin: true,
+    },
+    // US Census geocoder, used to confirm home addresses on the profile page.
+    '/census': {
+      target: 'https://geocoding.geo.census.gov',
+      changeOrigin: true,
+      rewrite: (p) => p.replace(/^\/census/, '/geocoder'),
+    },
+    // ElevenLabs text-to-speech for the Alerts page. The API key is added here,
+    // server-side, so it never ships in the frontend bundle.
+    // (This key needs Text to Speech access, on top of ElevenAgents.)
+    '/tts': {
+      target: 'https://api.elevenlabs.io',
+      changeOrigin: true,
+      rewrite: (p) => p.replace(/^\/tts/, '/v1/text-to-speech'),
+      headers: { 'xi-api-key': env.ELEVENLABS_API_KEY ?? '' },
+    },
+  }
+
   return {
     plugins: [react(), tailwindcss(), serverApis(env)],
     resolve: {
-      alias: { '@': path.resolve(__dirname, './src') },
+      alias: { '@': path.resolve(import.meta.dirname, './src') },
     },
-    server: { proxy: nwpsProxy },
-    preview: { proxy: nwpsProxy },
+    server: { proxy },
+    preview: { proxy },
   }
 })

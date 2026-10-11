@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { MapContainer, TileLayer, Circle, CircleMarker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { BellRing, History, Keyboard, Loader2, LocateFixed, Mic, Pause, Play, Radio } from "lucide-react";
+import { BellRing, History, Keyboard, Loader2, LocateFixed, Lock, Mic, Pause, Play, Radio } from "lucide-react";
 import VoiceAgent from "@/components/voice-agent";
 import ChatAgent from "@/components/chat-agent";
 import { HOUSTON } from "@/lib/mock-data";
@@ -13,6 +13,10 @@ import { useFloodAlarm } from "@/components/flood-alarm";
 import { useLocation } from "@/lib/use-location";
 import { cn } from "@/lib/utils";
 import { TILES, useMapTheme } from "@/lib/use-map-theme";
+import { useAuth } from "@/components/auth-provider";
+
+// Guests (not signed in) get text chat only, with this many questions
+const GUEST_QUESTION_LIMIT = 2;
 
 // Smoothly pans the map when the voice agent focuses a gauge
 function FlyToGauge({ gaugeId, gauges }: { gaugeId: string | null; gauges: Gauge[] }) {
@@ -39,14 +43,22 @@ function FlyToUser({ coords }: { coords: [number, number] | null }) {
 }
 
 export default function MapPage() {
+  const { user } = useAuth();
+  const isGuest = !user;
   const mapTheme = useMapTheme();
   const { gauges: liveGauges, loading, error, updatedAt } = useGauges();
   const location = useLocation();
   const { prefs, prefsReady, testAlarm } = useFloodAlarm();
   const navigate = useNavigate();
   const householdNotes = prefs.dependents.trim() || undefined; // read by the ElevenLabs agent prompt
-  // Test alarm needs a home address and a phone number; if either is missing, send them to Profile to add it
+  // Test alarm needs a home address and a phone number; if either is missing, send them to Profile to add it.
+  // Guests have no profile, so they go to sign in.
   const onTestAlarm = () => {
+    if (isGuest) {
+      toast.info("Sign in to test alerts.");
+      navigate("/auth", { state: { from: "/map" } });
+      return;
+    }
     if (!prefsReady) return; // settings still loading
     const missing = [!prefs.address.trim() && "home address", !prefs.phone && "phone number"].filter(Boolean);
     if (missing.length > 0) {
@@ -58,7 +70,8 @@ export default function MapPage() {
   };
 
   const [focusId, setFocusId] = useState<string | null>(null);
-  const [mode, setMode] = useState<"talk" | "type">("talk");
+  const [chosenMode, setMode] = useState<"talk" | "type">("talk");
+  const mode = isGuest ? "type" : chosenMode; // voice is for signed-in users only
   const [replay, setReplay] = useState(false);
   const [hour, setHour] = useState(0); // 0–47 hours into the Beryl replay
   const [playing, setPlaying] = useState(false);
@@ -251,7 +264,7 @@ export default function MapPage() {
         {/* Test the flood alarm (sample alarm, shelters and, if call alerts are on, a test call) */}
         <button
           onClick={onTestAlarm}
-          disabled={!prefsReady}
+          disabled={!isGuest && !prefsReady}
           className="absolute right-4 top-16 z-[500] flex items-center gap-2 rounded-xl border border-navy-800 bg-navy-950/90 px-3 py-2 text-sm text-navy-300 backdrop-blur transition-colors hover:text-white disabled:opacity-60"
         >
           <BellRing className="h-4 w-4" /> Test alarm
@@ -276,18 +289,31 @@ export default function MapPage() {
             {([
               ["talk", Mic, "Talk"],
               ["type", Keyboard, "Type"],
-            ] as const).map(([m, Icon, label]) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-lg px-4 py-1.5 transition-colors",
-                  mode === m ? "bg-teal-600 text-white" : "text-navy-400 hover:text-white",
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" /> {label}
-              </button>
-            ))}
+            ] as const).map(([m, Icon, label]) =>
+              isGuest && m === "talk" ? (
+                // Voice is locked for guests: clicking it goes to sign in
+                <Link
+                  key={m}
+                  to="/auth"
+                  state={{ from: "/map" }}
+                  title="Sign in to talk to FloodLine"
+                  className="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-navy-500 transition-colors hover:text-white"
+                >
+                  <Lock className="h-3.5 w-3.5" /> {label}
+                </Link>
+              ) : (
+                <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg px-4 py-1.5 transition-colors",
+                    mode === m ? "bg-teal-600 text-white" : "text-navy-400 hover:text-white",
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" /> {label}
+                </button>
+              ),
+            )}
           </div>
           {mode === "talk" ? (
             <>
@@ -295,7 +321,12 @@ export default function MapPage() {
               <VoiceAgent className="mt-4" onFocusGauge={setFocusId} householdNotes={householdNotes} />
             </>
           ) : (
-            <ChatAgent className="mt-3" onFocusGauge={setFocusId} householdNotes={householdNotes} />
+            <ChatAgent
+              className="mt-3"
+              onFocusGauge={setFocusId}
+              householdNotes={householdNotes}
+              guestLimit={isGuest ? GUEST_QUESTION_LIMIT : undefined}
+            />
           )}
         </div>
 
@@ -333,7 +364,11 @@ export default function MapPage() {
                   style={
                     g.risk === "flooding"
                       ? { background: LIVE_RISK_COLOR.flooding, borderColor: LIVE_RISK_COLOR.flooding, color: "#0b1128" }
-                      : { borderColor: LIVE_RISK_COLOR[g.risk], color: LIVE_RISK_COLOR[g.risk], borderStyle: g.risk === "watch" ? "dashed" : "solid" }
+                      : {
+                          borderColor: LIVE_RISK_COLOR[g.risk],
+                          color: LIVE_RISK_COLOR[g.risk],
+                          borderStyle: g.risk === "watch" ? "dashed" : "solid",
+                        }
                   }
                 >
                   {g.risk}

@@ -15,18 +15,18 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route element={<Layout />}>
-            {/* Public: anyone can see the login page */}
+            {/* Public: landing is the default page; guests get a limited map (text chat, 2 questions) */}
+            <Route path="/" element={<Landing />} />
+            <Route path="/map" element={<MapPage />} />
             <Route path="/auth" element={<Auth />} />
 
             {/* Protected: must be logged in */}
             <Route element={<RequireAuth />}>
-              <Route path="/" element={<Landing />} />
-              <Route path="/map" element={<MapPage />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/alerts" element={<Alerts />} />
             </Route>
 
-            {/* Unknown URLs go home (which redirects to login if needed) */}
+            {/* Unknown URLs go to the landing page */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
