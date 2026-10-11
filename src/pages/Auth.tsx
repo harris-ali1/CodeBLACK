@@ -19,10 +19,10 @@ export default function Auth() {
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  if (loading) return <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center text-navy-400">Loading account…</div>;
-  if (user) return <Navigate to="/profile" replace />;
+ const destination = (location.state as { from?: string } | null)?.from ?? "/";
 
-  const destination = (location.state as { from?: string } | null)?.from ?? "/profile";
+  if (loading) return <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center text-navy-400">Loading account…</div>;
+  if (user) return <Navigate to={destination} replace />;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
